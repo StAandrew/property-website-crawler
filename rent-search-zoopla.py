@@ -12,12 +12,13 @@ from bs4 import BeautifulSoup
 from random import randrange
 from urllib.request import urlopen, Request
 from hashlib import sha256
+import credentials
   
-MY_ADDRESS = 'xxxxxxx@yourmail.com'
-MY_PASSWORD = 'XXXXXXX'
+MY_ADDRESS = credentials.MY_ADDRESS
+MY_PASSWORD = credentials.MY_PASSWORD
 TO_ADDRESS = 'xxxxxxx@somemail.com'
-MY_URL = 'https://www.zoopla.co.uk/to-rent/property/wc1h/?added=24_hours&beds_min=3&include_shared_accommodation=false&page_size=25&polyenc=mfnyHpc%5BzUqGt%5BcLoIw~AePqd%40kHie%40iJbH%7BFfGeBYuBpGoXlOeGzH%60V~%7C%40dGlX~CpN&price_frequency=per_month&price_max=5000&q=WC1H&radius=0&results_sort=newest_listings&search_source=refine'
-# MY_URL = 'https://www.zoopla.co.uk/to-rent/property/wc1h/?beds_min=3&include_shared_accommodation=false&page_size=25&polyenc=mfnyHpc%5BzUqGt%5BcLoIw~AePqd%40kHie%40iJbH%7BFfGeBYuBpGoXlOeGzH%60V~%7C%40dGlX~CpN&price_frequency=per_month&price_max=5000&q=WC1H&radius=0&results_sort=newest_listings&search_source=refine'
+# MY_URL = 'https://www.zoopla.co.uk/to-rent/property/wc1h/?added=24_hours&beds_min=3&include_shared_accommodation=false&page_size=25&polyenc=mfnyHpc%5BzUqGt%5BcLoIw~AePqd%40kHie%40iJbH%7BFfGeBYuBpGoXlOeGzH%60V~%7C%40dGlX~CpN&price_frequency=per_month&price_max=5000&q=WC1H&radius=0&results_sort=newest_listings&search_source=refine'
+MY_URL = 'https://www.zoopla.co.uk/to-rent/property/wc1h/?beds_min=3&include_shared_accommodation=false&page_size=25&polyenc=mfnyHpc%5BzUqGt%5BcLoIw~AePqd%40kHie%40iJbH%7BFfGeBYuBpGoXlOeGzH%60V~%7C%40dGlX~CpN&price_frequency=per_month&price_max=5000&q=WC1H&radius=0&results_sort=newest_listings&search_source=refine'
 PROD = 1
 
 
@@ -86,15 +87,12 @@ class AllProperties():
 
 def login():
     try:
-        s = smtplib.SMTP(host='smtp-mail.outlook.com', port=587)
-        s.starttls()
+        s = smtplib.SMTP_SSL(host='smtp.gmail.com', port=465)
+        s.ehlo()
         s.login(MY_ADDRESS, MY_PASSWORD)
         return s
     except:
         exit("Email login error")
-    else:
-        print('Email login successful')
-
 
 def send_notification(s, subject, message):
     if PROD:
@@ -150,7 +148,7 @@ def fetch_data():
 
 def get_total_found(html):
     soup = BeautifulSoup(html , 'html.parser')
-    number_str = soup.find("p", {"class": "css-1kx8akd-Text-SearchResultsTotalText egjkayq8"}).text
+    number_str = soup.find("p", {"class": "css-ic7tm6 etdvs0b1"}).text
     number_str = number_str.replace(" results", "")
     try:
         return int(number_str)
@@ -161,7 +159,7 @@ def get_total_found(html):
 def get_prices(html):
     prices = []
     soup = BeautifulSoup(html , 'html.parser')
-    arr = soup.findAll("p", {"class": "css-1o565rw-Text eczcs4p0"})
+    arr = soup.findAll("p", {"class": "css-1w7anck e1h9td4l31"})
     for el in arr:
         prices.append(el.text.strip().replace(",", "")[1:])
     return prices
@@ -170,7 +168,7 @@ def get_prices(html):
 def get_titles(html):
     titles = []
     soup = BeautifulSoup(html , 'html.parser')
-    arr = soup.findAll("h2", {"class": "css-vthwmi-Heading2-StyledAddress e2uk8e13"})
+    arr = soup.findAll("h2", {"class": "css-sbwlc4-Heading2 e1h9td4l14"})
     for el in arr:
         titles.append(el.text.strip())
     return titles
@@ -188,7 +186,7 @@ def get_addresses(html):
 def get_links(html):
     links = []
     soup = BeautifulSoup(html , 'html.parser')
-    arr = soup.findAll("a", {"class": "e2uk8e17 css-1rzeb2c-StyledLink-Link-StyledLink e33dvwd0"})
+    arr = soup.findAll("a", {"class": "e1h9td4l10 css-1gdcbd8-StyledLink-Link e33dvwd0"})
     for el in arr:
         link = "https://zoopla.co.uk" + el.get('href')
         links.append(link)
