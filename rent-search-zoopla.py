@@ -13,14 +13,15 @@ from random import randrange
 from urllib.request import urlopen, Request
 from hashlib import sha256
 import credentials
+from maps_distance_finder import distance_from_work
   
 MY_ADDRESS = credentials.MY_ADDRESS
 MY_PASSWORD = credentials.MY_PASSWORD
 TO_ADDRESS = 'xxxxxxx@somemail.com'
-# MY_URL = 'https://www.zoopla.co.uk/to-rent/property/wc1h/?added=24_hours&beds_min=3&include_shared_accommodation=false&page_size=25&polyenc=mfnyHpc%5BzUqGt%5BcLoIw~AePqd%40kHie%40iJbH%7BFfGeBYuBpGoXlOeGzH%60V~%7C%40dGlX~CpN&price_frequency=per_month&price_max=5000&q=WC1H&radius=0&results_sort=newest_listings&search_source=refine'
-MY_URL = 'https://www.zoopla.co.uk/to-rent/property/wc1h/?beds_min=3&include_shared_accommodation=false&page_size=25&polyenc=mfnyHpc%5BzUqGt%5BcLoIw~AePqd%40kHie%40iJbH%7BFfGeBYuBpGoXlOeGzH%60V~%7C%40dGlX~CpN&price_frequency=per_month&price_max=5000&q=WC1H&radius=0&results_sort=newest_listings&search_source=refine'
+MY_URL = 'https://www.zoopla.co.uk/to-rent/property/wc1e/?beds_min=3&page_size=200&price_frequency=per_month&price_max=2000&price_min=1250&view_type=list&q=WC1E%20%20Bloomsbury%2C%20Gray%27s%20Inn&radius=5&results_sort=newest_listings&search_source=refine'
+# MY_URL = 'https://www.zoopla.co.uk/to-rent/property/wc1e/?beds_min=3&page_size=25&price_frequency=per_month&price_max=2000&price_min=1250&view_type=list&q=WC1E%20%20Bloomsbury%2C%20Gray%27s%20Inn&radius=3&results_sort=newest_listings&search_source=refine'
 PROD = 1
-
+movein_date_limit = datetime.datetime.strptime('1 Aug 2022', '%d %b %Y')
 
 class Property():
     def __init__(self, price=0, title='', address='', link='', agency=''):
@@ -43,7 +44,7 @@ class Property():
             self.hash = 0
 
 
-class AllProperties():
+class SavedProperties():
 
     def __init__(self, data=[]):
         self.arr = data
@@ -138,8 +139,8 @@ def save_html_to_file(data):
     file.close()
 
 
-def fetch_data():
-    url = Request(MY_URL, headers={'User-Agent': 'Mozilla/5.0'}) 
+def fetch_data(link=MY_URL):
+    url = Request(link, headers={'User-Agent': 'Mozilla/5.0'})
     page = urlopen(url)
     html_bytes = page.read()
     html = html_bytes.decode("utf-8")
@@ -148,7 +149,7 @@ def fetch_data():
 
 def get_total_found(html):
     soup = BeautifulSoup(html , 'html.parser')
-    number_str = soup.find("p", {"class": "css-ic7tm6 etdvs0b1"}).text
+    number_str = soup.select("p[class^=css-ic7tm6]")[0].text
     number_str = number_str.replace(" results", "")
     try:
         return int(number_str)
@@ -159,16 +160,16 @@ def get_total_found(html):
 def get_prices(html):
     prices = []
     soup = BeautifulSoup(html , 'html.parser')
-    arr = soup.findAll("p", {"class": "css-1w7anck e1h9td4l31"})
+    arr = soup.select("p[class^=css-1w7anck]")
     for el in arr:
-        prices.append(el.text.strip().replace(",", "")[1:])
+        prices.append(el.text.replace(' pcm','').replace(",", "")[1:])
     return prices
 
 
 def get_titles(html):
     titles = []
     soup = BeautifulSoup(html , 'html.parser')
-    arr = soup.findAll("h2", {"class": "css-sbwlc4-Heading2 e1h9td4l14"})
+    arr = soup.select("h2[class^=css-sbwlc4-Heading2]")
     for el in arr:
         titles.append(el.text.strip())
     return titles
@@ -186,7 +187,7 @@ def get_addresses(html):
 def get_links(html):
     links = []
     soup = BeautifulSoup(html , 'html.parser')
-    arr = soup.findAll("a", {"class": "e1h9td4l10 css-1gdcbd8-StyledLink-Link e33dvwd0"})
+    arr = soup.findAll("a", {"data-testid": "listing-details-image-link"})
     for el in arr:
         link = "https://zoopla.co.uk" + el.get('href')
         links.append(link)
@@ -211,24 +212,66 @@ def get_descriptions(html):
     return descriptions
 
 
+def get_movein_dates(html):
+    movein_dates = []
+    soup = BeautifulSoup(html , 'html.parser')
+    arr = soup.findAll('div', {'data-testid': 'search-result'})
+    for el in arr:
+        date_el = el.find("span", {"data-testid": "available-from-date"})
+        if not date_el is None:
+            str_date = date_el.text.replace('\xa0', '').replace('th', '').replace('st', '').replace('nd', '')
+            if str_date == 'immediately':
+                datetime_object = datetime.datetime.strptime('1 Jan 2000', "%d %b %Y")
+                movein_dates.append(datetime_object)
+            else:
+                datetime_object = datetime.datetime.strptime(str_date, "%d %b %Y")
+                movein_dates.append(datetime_object)
+        else:
+            datetime_object = datetime.datetime.strptime('1 Jan 2025', "%d %b %Y")
+            movein_dates.append(datetime_object)
+    return movein_dates
+
+
+def get_property_location(html):
+    soup = BeautifulSoup(html, 'html.parser')
+    script_text = soup.find('script').get_text()
+    # relevant = script_text[script_text.index('=') + 1:]
+    geo = json.loads(script_text)['@graph'][3]['geo']
+    lat = geo['latitude']
+    lng = geo['longitude']
+    return f'{lat}, {lng}'
+
+
+def get_distance(property_link):
+    property_website = fetch_data(property_link)
+    location = get_property_location(property_website)
+    return distance_from_work(location)
+
+
 def main():
     filename = 'properties_zoopla'
 
     while True:
         data = load_properties(filename)
-        all_properties = AllProperties(data)
+        saved_properties = SavedProperties(data)
 
         html = fetch_data()
         total_available = get_total_found(html)
+
         prices_all = get_prices(html)
         titles_all = get_titles(html)
         addresses_all = get_addresses(html)
         links_all = get_links(html)
         agencies_all = get_agencies(html)
+        movein_dates_all = get_movein_dates(html)
 
         for i in range(total_available):
-            all_properties.add_property(prices_all[i], titles_all[i], addresses_all[i], links_all[i], agencies_all[i])
-        save_properties(filename, all_properties.arr)
+            if movein_dates_all[i] > movein_date_limit:
+                biking_dist = get_distance(links_all[i])
+                if biking_dist < 60*30 or int(prices_all[i]) < 1800:
+                    saved_properties.add_property(prices_all[i], titles_all[i], addresses_all[i], links_all[i], agencies_all[i])
+
+        save_properties(filename, saved_properties.arr)
 
         to_sleep = 180 + randrange(90)
         time.sleep(to_sleep)
